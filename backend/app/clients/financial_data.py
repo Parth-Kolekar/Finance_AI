@@ -71,3 +71,39 @@ def get_news_for_ticker(ticker: str):
         "summary": item.get('summary'),
         "url": item.get('url'),
     } for item in news[:3]]
+
+
+# Add this function to app/clients/financial_data.py
+import requests # Add to top imports
+
+def get_news_from_newsapi():
+    """Fetches general market news from NewsAPI."""
+    api_key = os.getenv("NEWS_API_KEY")
+    if not api_key:
+        return [] # Return empty list if no key
+
+    url = "https://newsapi.org/v2/everything"
+    params = {
+        'q': 'finance OR market OR stocks OR economy', # A broader query
+        'apiKey': api_key,
+        'language': 'en',
+        'sortBy': 'publishedAt',
+        'pageSize': 10
+    }
+    
+    try:
+        response = requests.get(url, params=params)
+        if response.status_code == 200:
+            articles = response.json().get('articles', [])
+            # Reformat the data to match what our frontend expects
+            return [{
+                "source": item.get('source', {}).get('name'),
+                "headline": item.get('title'),
+                "summary": item.get('description'),
+                "url": item.get('url'),
+                "timestamp": item.get('publishedAt') # Note: Different format than finnhub
+            } for item in articles]
+        return []
+    except Exception as e:
+        print(f"Error fetching from NewsAPI: {e}")
+        return []
