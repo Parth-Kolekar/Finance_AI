@@ -1,49 +1,37 @@
 # app/clients/financial_data.py
+
 import os
 import finnhub
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Configure Finnhub client
+# --- Finnhub Client (for stocks and indices) ---
 finnhub_client = finnhub.Client(api_key=os.getenv("FINNHUB_API_KEY"))
 
 def get_index_quotes():
-    """Fetches quotes for major indices."""
-    indices = {'S&P 500': '^GSPC', 'NASDAQ': '^IXIC', 'Dow Jones': '^DJI'}
+    """Fetches quotes for major indices from Finnhub."""
+    # Using different tickers that are more likely to work with Finnhub's free plan
+    indices = {'S&P 500': 'SPY', 'NASDAQ': 'QQQ', 'Dow Jones': 'DIA'}
     data = []
     for name, ticker in indices.items():
         try:
-            # Note: Finnhub uses different symbols for indices. You might need to adjust or use a different provider.
-            # For this example, we'll use common stock tickers to ensure it works.
-            quote = finnhub_client.quote(ticker.replace('^', '')) # A hack for demo tickers
-            if quote['c'] == 0: continue # Skip if no data
+            quote = finnhub_client.quote(ticker)
+            if quote.get('c') == 0: continue
             data.append({
                 "name": name,
-                "ticker": ticker.replace('^', ''),
+                "ticker": ticker,
                 "price": quote.get('c'),
                 "change": quote.get('d'),
                 "change_percent": quote.get('dp')
             })
         except Exception as e:
-            print(f"Error fetching {name}: {e}")
+            print(f"Error fetching Finnhub index {name}: {e}")
     return data
 
-def get_latest_market_news():
-    """Fetches general market news."""
-    # Category: 'general', 'forex', 'crypto', 'merger'
-    news = finnhub_client.general_news('general', min_id=0)
-    # Return the top 10 articles in a clean format
-    return [{
-        "source": item.get('source'),
-        "headline": item.get('headline'),
-        "summary": item.get('summary'),
-        "url": item.get('url'),
-        "timestamp": item.get('datetime')
-    } for item in news[:10]]
-
 def get_batch_quotes(tickers: list[str]):
-    """Fetches real-time quotes for a list of tickers."""
+    """Fetches real-time quotes for a list of tickers from Finnhub."""
     quotes = []
     for ticker in tickers:
         try:
@@ -56,54 +44,59 @@ def get_batch_quotes(tickers: list[str]):
                 "change_percent": quote.get('dp')
             })
         except Exception as e:
-            print(f"Error fetching quote for {ticker}: {e}")
+            print(f"Error fetching Finnhub quote for {ticker}: {e}")
     return quotes
 
 def get_news_for_ticker(ticker: str):
-    """Fetches the 3 most recent news articles for a specific ticker."""
-    # Finnhub requires a date range for company news
+    """Fetches the 3 most recent news articles for a specific ticker from Finnhub."""
     from datetime import datetime, timedelta
     today = datetime.now()
     one_week_ago = today - timedelta(days=7)
-    news = finnhub_client.company_news(ticker, _from=one_week_ago.strftime('%Y-%m-%d'), to=today.strftime('%Y-%m-%d'))
-    return [{
-        "headline": item.get('headline'),
-        "summary": item.get('summary'),
-        "url": item.get('url'),
-    } for item in news[:3]]
+    news = []
+    try:
+        news_data = finnhub_client.company_news(ticker, _from=one_week_ago.strftime('%Y-%m-%d'), to=today.strftime('%Y-%m-%d'))
+        news = [{
+            "headline": item.get('headline'),
+            "summary": item.get('summary'),
+            "url": item.get('url'),
+        } for item in news_data[:3]]
+    except Exception as e:
+        print(f"Error fetching Finnhub company news for {ticker}: {e}")
+    return news
 
 
-# Add this function to app/clients/financial_data.py
-import requests # Add to top imports
-
-def get_news_from_newsapi():
-    """Fetches general market news from NewsAPI."""
-    api_key = os.getenv("NEWS_API_KEY")
+# --- Brave Client (for general market news) ---
+def get_news_from_brave():
+    """Fetches general market news using the Brave Search API."""
+    api_key = os.getenv("BRAVE_API_KEY")
     if not api_key:
-        return [] # Return empty list if no key
+        print("ERROR: BRAVE_API_KEY not found in environment.")
+        return []
 
-    url = "https://newsapi.org/v2/everything"
-    params = {
-        'q': 'finance OR market OR stocks OR economy', # A broader query
-        'apiKey': api_key,
-        'language': 'en',
-        'sortBy': 'publishedAt',
-        'pageSize': 10
+    url = "https://api.search.brave.com/res/v1/web/search"
+    params = {'q': 'latest stock market news finance economy'}
+    headers = {
+        'Accept': 'application/json',
+        'X-Subscription-Token': api_key
     }
     
     try:
-        response = requests.get(url, params=params)
+        response = requests.get(url, headers=headers, params=params)
         if response.status_code == 200:
-            articles = response.json().get('articles', [])
-            # Reformat the data to match what our frontend expects
+            data = response.json()
+            results = data.get('web', {}).get('results', [])
+            
+            # Reformat the data to match the standard format our frontend expects
             return [{
-                "source": item.get('source', {}).get('name'),
+                "source": item.get('profile', {}).get('name', 'Brave Search'),
                 "headline": item.get('title'),
                 "summary": item.get('description'),
                 "url": item.get('url'),
-                "timestamp": item.get('publishedAt') # Note: Different format than finnhub
-            } for item in articles]
-        return []
+                "timestamp": item.get('page_age') # Brave provides an age string
+            } for item in results]
+        else:
+            print(f"Brave API request failed with status {response.status_code}: {response.text}")
+            return []
     except Exception as e:
-        print(f"Error fetching from NewsAPI: {e}")
+        print(f"Error fetching from Brave API: {e}")
         return []
