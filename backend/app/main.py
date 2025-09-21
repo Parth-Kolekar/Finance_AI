@@ -46,7 +46,9 @@ def get_market_news():
     """Endpoint for the main market news page, powered by Brave."""
     articles = financial_data.get_news_from_brave()
     for article in articles:
-        article['sentiment'] = llm_services.classify_sentiment(article.get('headline'))
+        # Combine headline and summary for more accurate sentiment analysis
+        text_to_analyze = f"{article.get('headline', '')}. {article.get('summary', '')}"
+        article['sentiment'] = llm_services.classify_sentiment(text_to_analyze)
     return articles
 
 @app.post("/api/watchlist")

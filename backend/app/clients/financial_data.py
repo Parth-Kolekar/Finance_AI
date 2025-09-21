@@ -73,8 +73,8 @@ def get_news_from_brave():
         print("ERROR: BRAVE_API_KEY not found in environment.")
         return []
 
-    url = "https://api.search.brave.com/res/v1/web/search"
-    params = {'q': 'latest stock market news finance economy'}
+    url = "https://api.search.brave.com/res/v1/news/search"
+    params = {'q': 'breaking stock market news india sensex nse bse nifty'}
     headers = {
         'Accept': 'application/json',
         'X-Subscription-Token': api_key

@@ -2,57 +2,71 @@ import { LuSend } from 'react-icons/lu';
 import { useState } from 'react';
 import { askAssistant } from '../api';
 
-// Very small, safe markdown -> HTML renderer (supports headings and unordered lists)
-function escapeHtml(text) {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function renderSimpleMarkdownToHtml(md) {
+/**
+ * A simple and safe Markdown to HTML renderer.
+ * Supports:
+ * - Headings (h1, h2, h3)
+ * - Unordered lists (*, -, +)
+ * - Bold (**text**)
+ * - Italic (*text*)
+ */
+function renderMarkdownToHtml(md) {
   if (!md) return '';
+
+  const escapeHtml = (text) => 
+    text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  const processInline = (text) =>
+    escapeHtml(text)
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
+      .replace(/\*(.*?)\*/g, '<em>$1</em>');         // Italic
+
   const lines = md.split(/\r?\n/);
   let html = '';
   let inList = false;
 
-  for (let rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line) {
-      if (inList) { html += '</ul>'; inList = false; }
-      html += '<br/>';
-      continue;
-    }
-
-    // Headings: #, ##, ### (map to h1,h2,h3)
+  for (const line of lines) {
+    // Headings
     const headingMatch = line.match(/^(#{1,3})\s+(.*)$/);
     if (headingMatch) {
       if (inList) { html += '</ul>'; inList = false; }
       const level = headingMatch[1].length;
-  const content = escapeHtml(headingMatch[2]);
-  html += `<h${level} class='text-white font-semibold'>${content}</h${level}>`;
+      const content = processInline(headingMatch[2]);
+      html += `<h${level} class='text-lg font-semibold mt-4 mb-2 text-white'>${content}</h${level}>`;
       continue;
     }
 
-    // Unordered list: start with -, *, +
+    // Unordered list items
     const listMatch = line.match(/^[-*+]\s+(.*)$/);
     if (listMatch) {
-  const content = escapeHtml(listMatch[1]);
-  if (!inList) { html += "<ul class='ml-4 list-disc text-gray-300'>"; inList = true; }
-  html += `<li>${content}</li>`;
+      const content = processInline(listMatch[1]);
+      if (!inList) {
+        html += "<ul class='list-disc list-inside space-y-1 text-gray-300 mt-2'>";
+        inList = true;
+      }
+      html += `<li>${content}</li>`;
       continue;
     }
 
-    // Default paragraph
     if (inList) { html += '</ul>'; inList = false; }
-  html += `<p class='text-sm text-gray-200'>${escapeHtml(line)}</p>`;
+
+    // Paragraphs and blank lines
+    if (line.trim() === '') {
+      html += '<br />';
+    } else {
+      html += `<p class='text-gray-300'>${processInline(line)}</p>`;
+    }
   }
 
   if (inList) html += '</ul>';
   return html;
 }
+
 
 const AIAssistant = () => {
   const [input, setInput] = useState('');
@@ -90,12 +104,12 @@ const AIAssistant = () => {
         <div className="space-y-4">
           {messages.map((m, i) => (
             <div key={i} className={`flex items-start gap-4 ${m.role === 'assistant' ? 'text-gray-200' : 'text-gray-300'}`}>
-              <div className={`p-2 rounded-full ${m.role === 'assistant' ? 'bg-purple-500/20 text-purple-400' : 'bg-gray-800 text-gray-200'}`}>
+              <div className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full ${m.role === 'assistant' ? 'bg-purple-500/20 text-purple-400' : 'bg-gray-800 text-gray-200'}`}>
                 <p className="font-bold text-sm">{m.role === 'assistant' ? 'AI' : m.role === 'system' ? 'SYS' : 'You'}</p>
               </div>
-              <div className="prose prose-invert max-w-full">
+              <div className="prose prose-invert max-w-full pt-1">
                 {m.role === 'assistant' ? (
-                  <div dangerouslySetInnerHTML={{ __html: renderSimpleMarkdownToHtml(m.text) }} />
+                  <div dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(m.text) }} />
                 ) : (
                   <p className="text-sm">{m.text}</p>
                 )}

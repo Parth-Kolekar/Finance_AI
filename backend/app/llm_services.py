@@ -26,7 +26,7 @@ def classify_sentiment(headline: str):
         if model:
             prompt = f"""
             Analyze the sentiment of the following financial news headline.
-            Classify it as strictly one of: POSITIVE, NEGATIVE, or NEUTRAL.
+            Classify it as strictly one of: POSITIVE, NEGATIVE.
             Return only the single word classification (no extra text).
 
             Headline: "{headline}"
@@ -34,7 +34,7 @@ def classify_sentiment(headline: str):
             """
             response = model.generate_content(prompt)
             sentiment = getattr(response, 'text', '').strip().upper()
-            if sentiment in ["POSITIVE", "NEGATIVE", "NEUTRAL"]:
+            if sentiment in ["POSITIVE", "NEGATIVE"]:
                 return sentiment
         # Simple fallback
         low = headline.lower()
