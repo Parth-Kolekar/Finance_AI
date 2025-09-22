@@ -31,14 +31,20 @@ def get_index_quotes():
     return data
 
 def get_batch_quotes(tickers: list[str]):
-    """Fetches real-time quotes for a list of tickers from Finnhub."""
+    """Fetches real-time quotes and company names for a list of tickers from Finnhub."""
     quotes = []
     for ticker in tickers:
         try:
             quote = finnhub_client.quote(ticker)
             if quote.get('c') == 0: continue
+            
+            # Fetch company profile to get the full name
+            profile = finnhub_client.company_profile2(symbol=ticker)
+            company_name = profile.get('name') if profile else ticker
+
             quotes.append({
                 "ticker": ticker,
+                "name": company_name,
                 "price": quote.get('c'),
                 "change": quote.get('d'),
                 "change_percent": quote.get('dp')
@@ -67,14 +73,15 @@ def get_news_for_ticker(ticker: str):
 
 # --- Brave Client (for general market news) ---
 def get_news_from_brave():
-    """Fetches general market news using the Brave Search API."""
+    """Fetches general market news using the Brave Search API's news endpoint."""
     api_key = os.getenv("BRAVE_API_KEY")
     if not api_key:
         print("ERROR: BRAVE_API_KEY not found in environment.")
         return []
 
     url = "https://api.search.brave.com/res/v1/news/search"
-    params = {'q': 'breaking stock market news india sensex nse bse nifty'}
+    # Updated query for more relevant financial news
+    params = {'q': 'latest stock market news finance economy BSE Sensex NSE Nifty'}
     headers = {
         'Accept': 'application/json',
         'X-Subscription-Token': api_key
@@ -84,15 +91,16 @@ def get_news_from_brave():
         response = requests.get(url, headers=headers, params=params)
         if response.status_code == 200:
             data = response.json()
-            results = data.get('web', {}).get('results', [])
+            # The news endpoint uses 'results', not 'web.results'
+            results = data.get('results', [])
             
             # Reformat the data to match the standard format our frontend expects
             return [{
-                "source": item.get('profile', {}).get('name', 'Brave Search'),
+                "source": item.get('meta_url', {}).get('hostname', 'Brave News'),
                 "headline": item.get('title'),
-                "summary": item.get('description'),
+                "summary": item.get('description', 'No summary available.'), # Provide a fallback
                 "url": item.get('url'),
-                "timestamp": item.get('page_age') # Brave provides an age string
+                "timestamp": item.get('page_age')
             } for item in results]
         else:
             print(f"Brave API request failed with status {response.status_code}: {response.text}")
