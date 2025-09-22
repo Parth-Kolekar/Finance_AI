@@ -17,7 +17,7 @@ class AskRequest(BaseModel):
 app = FastAPI()
 
 origins = [
-    "http://localhost:8000",
+    "https://finai-gray.vercel.app",
     "http://127.0.0.1:5173",
     "http://localhost:5173",
 ]
