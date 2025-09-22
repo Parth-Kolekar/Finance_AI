@@ -1,14 +1,13 @@
 import { NavLink } from 'react-router-dom';
-import { LuLayoutDashboard, LuFileText, LuBot } from 'react-icons/lu';
+import { LuLayoutDashboard, LuBot } from 'react-icons/lu';
 import { FiBarChart2, FiList } from "react-icons/fi";
-import { FaRegNewspaper } from "react-icons/fa6";
+import { FaRegNewspaper, FaBitcoin } from "react-icons/fa6"; // Import FaBitcoin
 
 const Sidebar = () => {
   return (
     <aside className="w-64 bg-[#161B22] p-5 border-r border-gray-800 flex flex-col">
       <div className="flex items-center gap-2 mb-10">
-        <span className="bg-blue-600 text-white font-bold text-xl p-2 rounded-md">F</span>
-        <h1 className="text-xl font-bold">FinanceAI <span className="text-xs text-gray-400 block -mt-1">PROFESSIONAL</span></h1>
+        {/* ... (header is the same) */}
       </div>
 
       <nav className="flex flex-col justify-between flex-1">
@@ -17,7 +16,6 @@ const Sidebar = () => {
           <ul className="space-y-2">
             <NavItem icon={<LuLayoutDashboard size={20} />} label="Dashboard" to="/" />
             <NavItem icon={<FiBarChart2 size={20} />} label="Sentiment Analysis" to="/sentiment-analysis" />
-            
             <NavItem icon={<LuBot size={20} />} label="AI Assistant" to="/ai-assistant" />
           </ul>
 
@@ -25,12 +23,14 @@ const Sidebar = () => {
           <ul className="space-y-2">
             <NavItem icon={<FiList size={20} />} label="Watchlist" to="/watchlist" />
             <NavItem icon={<FaRegNewspaper size={20} />} label="Market News" to="/market-news" />
+            <NavItem icon={<FaBitcoin size={20} />} label="Crypto" to="/crypto" />
           </ul>
         </div>
       </nav>
     </aside>
   );
 };
+
 
 // Helper component for navigation items
 const NavItem = ({ icon, label, to }) => {

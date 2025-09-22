@@ -34,4 +34,10 @@ export async function askAssistant(query) {
   });
 }
 
+
+export async function fetchCryptoData() {
+  return getJSON('/api/crypto');
+}
+
+
 export default { fetchNews, fetchWatchlist, askAssistant, fetchDashboardOverview, fetchMarketTrends };

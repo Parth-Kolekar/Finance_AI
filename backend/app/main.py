@@ -73,3 +73,10 @@ def ask_ai_assistant(request: AskRequest):
     """Endpoint for the AI financial assistant chat."""
     answer = llm_services.answer_question(request.query)
     return {"answer": answer}
+
+
+@app.get("/api/crypto")
+def get_crypto_market_data():
+    """Endpoint for the cryptocurrency market page."""
+    symbols = ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "DOGE/USD"]
+    return financial_data.get_crypto_data(symbols)

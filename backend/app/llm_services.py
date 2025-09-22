@@ -1,8 +1,10 @@
 # app/llm_services.py
 
 import os
+import re
 import google.generativeai as genai
 from dotenv import load_dotenv
+from .clients import financial_data
 
 load_dotenv()
 
@@ -31,6 +33,7 @@ def load_word_list(file_path: str) -> set:
     print(f"Error: Could not decode the file '{file_path}' with any of the attempted encodings.")
     return set()
 
+# Construct paths relative to the current script's location
 base_dir = os.path.dirname(os.path.abspath(__file__))
 positive_words = load_word_list(os.path.join(base_dir, 'positive-words.txt'))
 negative_words = load_word_list(os.path.join(base_dir, 'negative-words.txt'))
@@ -42,11 +45,15 @@ if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
         model = genai.GenerativeModel('gemini-1.5-flash')
-        print("✅ Gemini model configured successfully.")
+        print("✅ Gemini model configured successfully (gemini-1.5-flash).")
     except Exception as e:
         print(f"⚠️ Warning: could not configure Gemini model: {e}")
 else:
     print("⚠️ Warning: GOOGLE_API_KEY not found. Using fallback methods.")
+
+def _extract_tickers(query: str) -> list:
+    """Extracts potential stock tickers from a query using regex."""
+    return re.findall(r'\b[A-Z]{1,5}\b', query)
 
 def classify_sentiment(headline: str):
     """Classifies a headline as POSITIVE, NEGATIVE, or NEUTRAL."""
@@ -69,7 +76,7 @@ def classify_sentiment(headline: str):
             if sentiment in ["POSITIVE", "NEGATIVE", "NEUTRAL"]:
                 return sentiment
         except Exception:
-            pass # Fall through to keyword analysis on error
+            pass
     
     low = headline.lower()
     if any(word in low for word in positive_words):
@@ -103,20 +110,58 @@ def get_ai_insight_for_ticker(ticker: str, news_items: list[dict]):
         except Exception as e:
             print(f"Error generating AI insight: {e}")
 
-    # Fallback if model fails
     first_headline = news_items[0].get('headline', 'recent developments')
     return f"Key headline for {ticker}: {first_headline[:100]}..."
 
 def answer_question(query: str):
-    """Answers a general financial question using the LLM."""
-    if model:
-        try:
-            prompt = f"You are an expert financial analyst. Answer the following question clearly and concisely in Markdown. Use sections or bullet points where helpful. Keep the answer under 300 words. Question: {query}"
-            response = model.generate_content(prompt)
-            return response.text.strip()
-        except Exception as e:
-            print(f"Error answering question: {e}")
-            return "Sorry, I could not process that question at this time."
+    """
+    Answers a financial question. If stock tickers are mentioned, it fetches
+    real-time data to provide a context-aware, data-driven response (RAG).
+    """
+    if not model:
+        return "The AI Assistant is currently unavailable. Please try again later."
+
+    tickers = _extract_tickers(query)
+    
+    context = ""
+    if tickers:
+        print(f"Found tickers in query: {tickers}")
+        for ticker in tickers:
+            quote = financial_data.get_single_quote(ticker)
+            news = financial_data.get_news_for_ticker(ticker)
             
-    # Fallback if model is not available
-    return "The AI Assistant is currently unavailable. Please try again later."
+            context += f"\n\n--- CONTEXT FOR {ticker} ---\n"
+            if quote and quote.get('price') is not None:
+                context += f"Current Price: ${quote['price']:.2f} (Change: {quote.get('change', 0):.2f}, {quote.get('change_percent', 0):.2f}%)\n"
+            
+            if news:
+                context += "Recent News:\n"
+                for item in news:
+                    context += f"- {item.get('headline', 'No headline')}\n"
+            else:
+                context += "No recent news found.\n"
+        context += "-------------------------\n"
+
+    if context:
+        prompt = f"""
+        You are an expert financial analyst. Your task is to answer the user's question based on the real-time contextual data provided below.
+        Format your answer clearly in Markdown.
+
+        {context}
+
+        User's Question: {query}
+        """
+    else:
+        prompt = f"""
+        You are an expert financial analyst. Answer the following question clearly and concisely in Markdown. 
+        Use sections or bullet points where helpful. Keep the answer under 300 words.
+        
+        Question: {query}
+        """
+
+    try:
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        print(f"Error answering question with Gemini: {e}")
+        return "Sorry, I encountered an error while processing your request."

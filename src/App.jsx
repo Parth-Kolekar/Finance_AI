@@ -6,7 +6,7 @@ import Watchlist from './pages/Watchlist';
 import SentimentAnalysis from './pages/SentimentAnalysis';
 import AIAssistant from './pages/AIAssistant';
 import MarketNews from './pages/MarketNews';
-
+import Crypto from './pages/Crypto'; // Import the new page
 
 function App() {
   return (
@@ -19,10 +19,10 @@ function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/sentiment-analysis" element={<SentimentAnalysis />} />
-              
               <Route path="/ai-assistant" element={<AIAssistant />} />
               <Route path="/watchlist" element={<Watchlist />} />
               <Route path="/market-news" element={<MarketNews />} />
+              <Route path="/crypto" element={<Crypto />} />
             </Routes>
           </main>
         </div>
