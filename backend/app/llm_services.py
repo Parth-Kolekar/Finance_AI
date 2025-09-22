@@ -44,7 +44,7 @@ GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
         print("✅ Gemini model configured successfully (gemini-2.0-flash).")
     except Exception as e:
         print(f"⚠️ Warning: could not configure Gemini model: {e}")
