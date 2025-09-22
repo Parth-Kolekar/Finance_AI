@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000';
+const BASE_URL = 'https://hackx-team-6-finance.onrender.com';
 
 async function getJSON(path, opts = {}) {
   const res = await fetch(`${BASE_URL}${path}`, opts);
