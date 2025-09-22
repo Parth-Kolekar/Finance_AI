@@ -4,15 +4,36 @@ import os
 import finnhub
 import requests
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
+from twelvedata import TDClient
 
 load_dotenv()
 
 # --- Finnhub Client (for stocks and indices) ---
 finnhub_client = finnhub.Client(api_key=os.getenv("FINNHUB_API_KEY"))
 
+# --- Twelve Data Client (for historical chart data) ---
+td_client = TDClient(apikey=os.getenv("TWELVE_DATA_API_KEY"))
+
+def get_stock_candles(ticker: str, interval: str, outputsize: int):
+    """Fetches historical stock data using Twelve Data."""
+    try:
+        ts = td_client.time_series(
+            symbol=ticker,
+            interval=interval,
+            outputsize=outputsize,
+        )
+        data = ts.as_json()[::-1] # Reverse to get chronological order
+        return {
+            "dates": [item['datetime'] for item in data],
+            "prices": [float(item['close']) for item in data]
+        }
+    except Exception as e:
+        print(f"Error fetching Twelve Data candles for {ticker}: {e}")
+        return None
+
 def get_index_quotes():
     """Fetches quotes for major indices from Finnhub."""
-    # Using different tickers that are more likely to work with Finnhub's free plan
     indices = {'S&P 500': 'SPY', 'NASDAQ': 'QQQ', 'Dow Jones': 'DIA'}
     data = []
     for name, ticker in indices.items():
@@ -20,11 +41,8 @@ def get_index_quotes():
             quote = finnhub_client.quote(ticker)
             if quote.get('c') == 0: continue
             data.append({
-                "name": name,
-                "ticker": ticker,
-                "price": quote.get('c'),
-                "change": quote.get('d'),
-                "change_percent": quote.get('dp')
+                "name": name, "ticker": ticker, "price": quote.get('c'),
+                "change": quote.get('d'), "change_percent": quote.get('dp')
             })
         except Exception as e:
             print(f"Error fetching Finnhub index {name}: {e}")
@@ -38,16 +56,12 @@ def get_batch_quotes(tickers: list[str]):
             quote = finnhub_client.quote(ticker)
             if quote.get('c') == 0: continue
             
-            # Fetch company profile to get the full name
             profile = finnhub_client.company_profile2(symbol=ticker)
             company_name = profile.get('name') if profile else ticker
 
             quotes.append({
-                "ticker": ticker,
-                "name": company_name,
-                "price": quote.get('c'),
-                "change": quote.get('d'),
-                "change_percent": quote.get('dp')
+                "ticker": ticker, "name": company_name, "price": quote.get('c'),
+                "change": quote.get('d'), "change_percent": quote.get('dp')
             })
         except Exception as e:
             print(f"Error fetching Finnhub quote for {ticker}: {e}")
@@ -55,7 +69,6 @@ def get_batch_quotes(tickers: list[str]):
 
 def get_news_for_ticker(ticker: str):
     """Fetches the 3 most recent news articles for a specific ticker from Finnhub."""
-    from datetime import datetime, timedelta
     today = datetime.now()
     one_week_ago = today - timedelta(days=7)
     news = []
@@ -70,7 +83,6 @@ def get_news_for_ticker(ticker: str):
         print(f"Error fetching Finnhub company news for {ticker}: {e}")
     return news
 
-
 # --- Brave Client (for general market news) ---
 def get_news_from_brave():
     """Fetches general market news using the Brave Search API's news endpoint."""
@@ -80,8 +92,7 @@ def get_news_from_brave():
         return []
 
     url = "https://api.search.brave.com/res/v1/news/search"
-    # Updated query for more relevant financial news
-    params = {'q': 'latest stock market news finance economy BSE Sensex NSE Nifty'}
+    params = {'q': 'latest stock market news finance economy'}
     headers = {
         'Accept': 'application/json',
         'X-Subscription-Token': api_key
@@ -91,14 +102,12 @@ def get_news_from_brave():
         response = requests.get(url, headers=headers, params=params)
         if response.status_code == 200:
             data = response.json()
-            # The news endpoint uses 'results', not 'web.results'
             results = data.get('results', [])
             
-            # Reformat the data to match the standard format our frontend expects
             return [{
                 "source": item.get('meta_url', {}).get('hostname', 'Brave News'),
                 "headline": item.get('title'),
-                "summary": item.get('description', 'No summary available.'), # Provide a fallback
+                "summary": item.get('description', 'No summary available.'),
                 "url": item.get('url'),
                 "timestamp": item.get('page_age')
             } for item in results]

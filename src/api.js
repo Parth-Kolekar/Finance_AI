@@ -14,6 +14,10 @@ export async function fetchDashboardOverview() {
   return getJSON('/api/dashboard/overview');
 }
 
+export async function fetchMarketTrends() {
+  return getJSON('/api/market-trends');
+}
+
 export async function fetchWatchlist(tickers) {
   return getJSON('/api/watchlist', {
     method: 'POST',
@@ -30,4 +34,4 @@ export async function askAssistant(query) {
   });
 }
 
-export default { fetchNews, fetchWatchlist, askAssistant, fetchDashboardOverview };
+export default { fetchNews, fetchWatchlist, askAssistant, fetchDashboardOverview, fetchMarketTrends };

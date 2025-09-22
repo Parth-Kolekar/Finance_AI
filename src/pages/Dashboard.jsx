@@ -1,7 +1,30 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Card from '../components/shared/Card';
 import Tag from '../components/shared/Tag';
-import { LuBrainCircuit } from 'react-icons/lu';
+import { LuBrainCircuit, LuSend } from 'react-icons/lu';
+import { askAssistant, fetchMarketTrends } from '../api';
+import { renderMarkdownToHtml } from '../utils/markdown'; // Ensure this utility exists and is imported
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Filler,
+} from 'chart.js';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Filler,
+);
 
 const marketData = [
   { name: 'S&P 500', value: '4,891.23', change: '+42.75', percentage: '+0.88%', isPositive: true },
@@ -14,6 +37,140 @@ const recentAnalysisData = [
     { sector: 'Tech Sector', sentiment: 'BULLISH', summary: 'AI investments driving growth in major tech companies', isPositive: true },
     { sector: 'Energy Sector', sentiment: 'BEARISH', summary: 'New environmental policies impacting sector performance', isPositive: false },
 ];
+
+// Quick AI Insights Component
+const QuickAIInsights = () => {
+    const [prompt, setPrompt] = useState('');
+    const [response, setResponse] = useState("Hi! I'm your AI financial assistant. Ask me a quick question about the market.");
+    const [loading, setLoading] = useState(false);
+
+    const handleSend = async () => {
+        if (!prompt.trim()) return;
+        setLoading(true);
+        setResponse('');
+        try {
+            const res = await askAssistant(prompt);
+            setResponse(res.answer);
+        } catch (error) {
+            console.error(error);
+            setResponse('Sorry, I was unable to get a response.');
+        } finally {
+            setLoading(false);
+            setPrompt(''); // Clear prompt after sending
+        }
+    };
+
+    return (
+        <Card>
+            <h3 className="text-lg font-semibold mb-2">Quick AI Insights</h3>
+            <div className="flex items-start gap-3 p-3 bg-[#0D1117] rounded-lg min-h-[120px]">
+                <div className="bg-purple-500 p-2 rounded-full mt-1 flex-shrink-0"><LuBrainCircuit size={20} /></div>
+                <div className="text-sm text-gray-300 flex-1 prose prose-invert max-w-full">
+                    {loading 
+                        ? <span className="animate-pulse">Getting insights...</span> 
+                        : <div dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(response) }} />
+                    }
+                </div>
+            </div>
+            <div className="relative mt-4">
+                <input
+                    type="text"
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="e.g., Which sector is best to invest in right now?"
+                    className="w-full bg-[#0D1117] border border-gray-700 rounded-lg pl-4 pr-12 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
+                    disabled={loading}
+                />
+                <button
+                    disabled={loading || !prompt.trim()}
+                    onClick={handleSend}
+                    className="absolute top-1/2 right-2 -translate-y-1/2 bg-blue-600 p-2 rounded-md hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                    <LuSend size={18} />
+                </button>
+            </div>
+        </Card>
+    );
+};
+
+
+// Market Trend Analysis Component
+const MarketTrendAnalysis = () => {
+    const [chartData, setChartData] = useState(null);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        async function loadChartData() {
+            try {
+                const data = await fetchMarketTrends();
+                if (!data || !data.prices || data.prices.length === 0) {
+                   setError("No chart data available at this time.");
+                   return;
+                }
+                setChartData({
+                    labels: data.dates,
+                    datasets: [{
+                        label: 'S&P 500 (SPY)',
+                        data: data.prices,
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0,
+                    }]
+                });
+            } catch (err) {
+                setError("Could not load market trend data.");
+                console.error(err);
+            }
+        }
+        loadChartData();
+    }, []);
+
+    const options = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                mode: 'index',
+                intersect: false,
+                callbacks: {
+                    label: (context) => `Price: $${context.parsed.y.toFixed(2)}`
+                }
+            }
+        },
+        scales: {
+            x: {
+                grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                ticks: {
+                    maxTicksLimit: 8,
+                    color: '#9ca3af',
+                }
+            },
+            y: {
+                grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                ticks: {
+                    color: '#9ca3af',
+                    callback: (value) => `$${value}`
+                }
+            }
+        }
+    };
+    
+    return (
+        <Card>
+            <h3 className="text-lg font-semibold">Market Trend Analysis: S&P 500 (Today)</h3>
+            <div className="h-64 mt-4">
+                {error && <p className="text-red-400 text-center mt-10">{error}</p>}
+                {!chartData && !error && <p className="text-gray-400 text-center mt-10 animate-pulse">Loading chart...</p>}
+                {chartData && <Line options={options} data={chartData} />}
+            </div>
+        </Card>
+    );
+};
+
 
 const Dashboard = () => {
   return (
@@ -39,20 +196,8 @@ const Dashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-            <Card>
-                <h3 className="text-lg font-semibold mb-2">Quick AI Insights</h3>
-                <p className="text-sm text-gray-400 mb-4">Ask about market trends, stock analysis, or any financial questions.</p>
-                <div className="flex items-start gap-4">
-                    <div className="bg-purple-500 p-2 rounded-full"><LuBrainCircuit size={20} /></div>
-                    <div className="bg-[#0D1117] p-3 rounded-lg flex-1">
-                        <p className="text-sm">Hi! I'm your AI financial assistant.</p>
-                    </div>
-                </div>
-            </Card>
-            <Card>
-                <h3 className="text-lg font-semibold">Market Trend Analysis</h3>
-                <p className="text-sm text-gray-400 mt-2">All-powered technical analysis will be displayed here.</p>
-            </Card>
+            <QuickAIInsights />
+            <MarketTrendAnalysis />
         </div>
 
         <div className="lg:col-span-1">
