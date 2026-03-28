@@ -44,8 +44,9 @@ GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.0-flash')
-        print("✅ Gemini model configured successfully (gemini-2.0-flash).")
+        # model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        print("✅ Gemini model configured successfully (gemini-2.5-flash).")
     except Exception as e:
         print(f"⚠️ Warning: could not configure Gemini model: {e}")
 else:
@@ -56,27 +57,9 @@ def _extract_tickers(query: str) -> list:
     return re.findall(r'\b[A-Z]{1,5}\b', query)
 
 def classify_sentiment(headline: str):
-    """Classifies a headline as POSITIVE, NEGATIVE, or NEUTRAL."""
+    """Classifies a headline as POSITIVE, NEGATIVE, or NEUTRAL using local keyword matching."""
     if not headline or not headline.strip():
         return "NEUTRAL"
-
-    if model:
-        try:
-            prompt = f"""
-            Analyze the sentiment of the following financial news item.
-            Your response must be a single word: POSITIVE, NEGATIVE, or NEUTRAL.
-            Do not include any other text, punctuation, or explanations.
-
-            News: "{headline}"
-            Sentiment:
-            """
-            response = model.generate_content(prompt)
-            sentiment = response.text.strip().upper()
-            
-            if sentiment in ["POSITIVE", "NEGATIVE", "NEUTRAL"]:
-                return sentiment
-        except Exception:
-            pass
     
     low = headline.lower()
     if any(word in low for word in positive_words):
@@ -112,6 +95,57 @@ def get_ai_insight_for_ticker(ticker: str, news_items: list[dict]):
 
     first_headline = news_items[0].get('headline', 'recent developments')
     return f"Key headline for {ticker}: {first_headline[:100]}..."
+
+import json
+
+def add_batch_ai_insights(quotes: list[dict]):
+    """Processes AI insights for all quotes in a single LLM call to save API quota."""
+    if not model or not quotes:
+        for q in quotes:
+            news = q.get('news', [])
+            if news:
+                q['ai_insight'] = f"Key headline: {news[0].get('headline', '')[:80]}..."
+            else:
+                q['ai_insight'] = "No recent insights."
+        return quotes
+
+    # Prepare prompt data
+    prompt_data = ""
+    for q in quotes:
+        ticker = q['ticker']
+        news = q.get('news', [])
+        headlines = "\n".join([f"- {item['headline']}" for item in news[:3] if item.get('headline')])
+        prompt_data += f"Ticker: {ticker}\nHeadlines:\n{headlines}\n\n"
+
+    try:
+        prompt = f"""
+        Act as a professional financial analyst. Based on the recent headlines for the following tickers, write a single, concise sentence (max 15 words) insight for EACH ticker.
+        
+        {prompt_data}
+        
+        Return your response ONLY as a valid JSON object mapping each ticker to its insight string. For example:
+        {{"AAPL": "Strong earnings expected to drive growth.", "MSFT": "AI integration boosts cloud revenue prospects."}}
+        Do not output markdown code blocks.
+        """
+        response = model.generate_content(prompt)
+        text = response.text.replace('```json', '').replace('```', '').strip()
+        insights = json.loads(text)
+        
+        for q in quotes:
+            ticker = q['ticker']
+            if ticker in insights:
+                q['ai_insight'] = insights[ticker]
+            else:
+                news = q.get('news', [])
+                q['ai_insight'] = f"Key headline: {news[0].get('headline', '')[:80]}..." if news else "No insights."
+                
+    except Exception as e:
+        print(f"Error in batch AI insights: {e}")
+        for q in quotes:
+            news = q.get('news', [])
+            q['ai_insight'] = f"Key headline: {news[0].get('headline', '')[:80]}..." if news else "No insights."
+            
+    return quotes
 
 def answer_question(query: str):
     """

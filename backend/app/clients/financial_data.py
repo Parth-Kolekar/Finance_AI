@@ -1,151 +1,159 @@
 # app/clients/financial_data.py
 
-import os
-import finnhub
+import yfinance as yf
 import requests
-from dotenv import load_dotenv
-from datetime import datetime, timedelta
-from twelvedata import TDClient
-import time
+import xml.etree.ElementTree as ET
+from datetime import datetime
+from cachetools import cached, TTLCache
 
-load_dotenv()
+# --- Setup Caches ---
+# maxsize=100 items, ttl=300 seconds (5 minutes)
+market_cache = TTLCache(maxsize=100, ttl=300)
+news_cache = TTLCache(maxsize=100, ttl=300)
+crypto_cache = TTLCache(maxsize=100, ttl=300)
 
-# --- API Clients ---
-finnhub_client = finnhub.Client(api_key=os.getenv("FINNHUB_API_KEY"))
-td_client = TDClient(apikey=os.getenv("TWELVE_DATA_API_KEY"))
-
+@cached(cache=crypto_cache)
 def get_crypto_data(symbols: list):
-    """Fetches real-time quotes and 30-day history for a list of crypto symbols."""
+    """Fetches crypto data (Cached for 5 mins)."""
+    yf_symbols = [s.replace('/', '-') for s in symbols]
     data = []
-    for symbol in symbols:
+    
+    for orig_symbol, yf_symbol in zip(symbols, yf_symbols):
         try:
-            quote_data = td_client.quote(symbol=symbol).as_json()
+            ticker = yf.Ticker(yf_symbol)
+            hist = ticker.history(period="1mo") 
+            if hist.empty: continue
             
-            ts = td_client.time_series(
-                symbol=symbol,
-                interval="1day",
-                outputsize=30
-            )
-            history = ts.as_json()[::-1]
-
+            current_price = float(hist['Close'].iloc[-1])
+            prev_price = float(hist['Close'].iloc[-2]) if len(hist) > 1 else current_price
+            change = current_price - prev_price
+            
             data.append({
-                "name": quote_data.get('name'),
-                "symbol": quote_data.get('symbol'),
-                "price": float(quote_data.get('close', 0)),
-                "change": float(quote_data.get('change', 0)),
-                "percent_change": float(quote_data.get('percent_change', 0)),
-                "history": [float(item['close']) for item in history]
+                "name": yf_symbol.split('-')[0],
+                "symbol": orig_symbol,
+                "price": current_price,
+                "change": change,
+                "percent_change": (change / prev_price) * 100 if prev_price else 0,
+                "history": hist['Close'].tolist()
             })
-
-            time.sleep(8)
-
         except Exception as e:
-            print(f"Error fetching Twelve Data for crypto '{symbol}': {e}")
-            # If we hit an error (like a rate limit), just skip to the next symbol
-            continue
+            print(f"Error fetching yfinance crypto '{orig_symbol}': {e}")
             
     return data
 
+@cached(cache=market_cache)
 def get_stock_candles(ticker: str, interval: str, outputsize: int):
-    """Fetches historical stock data using Twelve Data."""
+    """Fetches historical stock data (Cached for 5 mins)."""
+    yf_interval = '1d' if interval == '1day' else interval 
     try:
-        ts = td_client.time_series(symbol=ticker, interval=interval, outputsize=outputsize)
-        data = ts.as_json()[::-1]
+        hist = yf.Ticker(ticker).history(period=f"{outputsize}d", interval=yf_interval)
+        if hist.empty: return None
         return {
-            "dates": [item['datetime'] for item in data],
-            "prices": [float(item['close']) for item in data]
+            "dates": hist.index.strftime('%Y-%m-%d').tolist(),
+            "prices": hist['Close'].tolist()
         }
     except Exception as e:
-        print(f"Error fetching Twelve Data candles for {ticker}: {e}")
         return None
 
 def get_single_quote(ticker: str):
-    """Fetches a single real-time quote for a specific ticker from Finnhub."""
+    """Real-time quote (Not cached so watchlists are accurate)."""
     try:
-        quote = finnhub_client.quote(ticker)
-        if quote.get('c') == 0: return None
+        hist = yf.Ticker(ticker).history(period="5d")
+        if hist.empty: return None
+        current = float(hist['Close'].iloc[-1])
+        prev = float(hist['Close'].iloc[-2]) if len(hist) > 1 else current
         return {
-            "price": quote.get('c'),
-            "change": quote.get('d'),
-            "change_percent": quote.get('dp')
+            "price": current,
+            "change": current - prev,
+            "change_percent": ((current - prev) / prev) * 100 if prev else 0
         }
     except Exception as e:
-        print(f"Error fetching Finnhub quote for {ticker}: {e}")
         return None
 
+@cached(cache=market_cache)
 def get_index_quotes():
-    """Fetches quotes for major indices from Finnhub."""
-    indices = {'S&P 500': 'SPY', 'NASDAQ': 'QQQ', 'Dow Jones': 'DIA'}
+    """Fetches major indices (Cached for 5 mins)."""
+    indices = {'S&P 500': '^GSPC', 'NASDAQ': '^IXIC', 'Dow Jones': '^DJI'}
     data = []
     for name, ticker in indices.items():
         try:
-            quote = finnhub_client.quote(ticker)
-            if quote.get('c') == 0: continue
+            hist = yf.Ticker(ticker).history(period="5d")
+            if hist.empty: continue
+            current = float(hist['Close'].iloc[-1])
+            prev = float(hist['Close'].iloc[-2]) if len(hist) > 1 else current
             data.append({
-                "name": name, "ticker": ticker, "price": quote.get('c'),
-                "change": quote.get('d'), "change_percent": quote.get('dp')
+                "name": name, "ticker": ticker, "price": current,
+                "change": current - prev, "change_percent": ((current - prev)/prev)*100 if prev else 0
             })
         except Exception as e:
-            print(f"Error fetching Finnhub index {name}: {e}")
+            pass
     return data
 
 def get_batch_quotes(tickers: list[str]):
-    """Fetches real-time quotes and company names for a list of tickers from Finnhub."""
+    """Fetches real-time quotes (Not cached so watchlists are accurate)."""
     quotes = []
     for ticker in tickers:
         try:
-            quote = finnhub_client.quote(ticker)
-            if quote.get('c') == 0: continue
-            profile = finnhub_client.company_profile2(symbol=ticker)
-            company_name = profile.get('name') if profile else ticker
+            t = yf.Ticker(ticker)
+            hist = t.history(period="5d")
+            if hist.empty: continue
+            current = float(hist['Close'].iloc[-1])
+            prev = float(hist['Close'].iloc[-2]) if len(hist) > 1 else current
+            company_name = t.info.get('shortName', ticker) if hasattr(t, 'info') else ticker
             quotes.append({
-                "ticker": ticker, "name": company_name, "price": quote.get('c'),
-                "change": quote.get('d'), "change_percent": quote.get('dp')
+                "ticker": ticker, "name": company_name, "price": current,
+                "change": current - prev, "change_percent": ((current - prev)/prev)*100 if prev else 0
             })
         except Exception as e:
-            print(f"Error fetching Finnhub quote for {ticker}: {e}")
+            pass
     return quotes
 
 def get_news_for_ticker(ticker: str):
-    """Fetches the 3 most recent news articles for a specific ticker from Finnhub."""
-    today = datetime.now()
-    one_week_ago = today - timedelta(days=7)
-    news = []
+    """Ticker-specific news."""
     try:
-        news_data = finnhub_client.company_news(ticker, _from=one_week_ago.strftime('%Y-%m-%d'), to=today.strftime('%Y-%m-%d'))
-        news = [{
-            "headline": item.get('headline'),
-            "summary": item.get('summary'),
-            "url": item.get('url'),
-        } for item in news_data[:3]]
+        url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}"
+        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+        root = ET.fromstring(response.content)
+        items = root.findall('.//item')
+        return [{
+            "headline": item.findtext('title'),
+            "summary": "Yahoo Finance News",
+            "url": item.findtext('link'),
+        } for item in items[:3]]
     except Exception as e:
-        print(f"Error fetching Finnhub company news for {ticker}: {e}")
-    return news
-
-def get_news_from_brave():
-    """Fetches general market news using the Brave Search API's news endpoint."""
-    api_key = os.getenv("BRAVE_API_KEY")
-    if not api_key:
-        print("ERROR: BRAVE_API_KEY not found in environment.")
         return []
-    url = "https://api.search.brave.com/res/v1/news/search"
-    params = {'q': 'latest stock market news finance economy'}
-    headers = {'Accept': 'application/json', 'X-Subscription-Token': api_key}
+
+@cached(cache=news_cache)
+def get_news_from_yahoo():
+    """
+    Renamed internally to avoid breaking main.py.
+    Now uses the ultra-reliable Yahoo Finance RSS Feed directly.
+    Cached for 5 minutes.
+    """
     try:
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code == 200:
-            data = response.json()
-            results = data.get('results', [])
-            return [{
-                "source": item.get('meta_url', {}).get('hostname', 'Brave News'),
-                "headline": item.get('title'),
-                "summary": item.get('description', 'No summary available.'),
-                "url": item.get('url'),
-                "timestamp": item.get('page_age')
-            } for item in results]
-        else:
-            print(f"Brave API request failed with status {response.status_code}: {response.text}")
-            return []
+        # Fetching general market news using SPY and QQQ
+        url = "https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY,QQQ"
+        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+        response.raise_for_status()
+        
+        # Parse the XML feed
+        root = ET.fromstring(response.content)
+        items = root.findall('.//item')
+        
+        news_list = []
+        for item in items[:15]:  # Grab top 15 articles
+            title = item.findtext('title')
+            link = item.findtext('link')
+            pubDate = item.findtext('pubDate')
+            
+            news_list.append({
+                "source": "Yahoo Finance",
+                "headline": title,
+                "summary": f"Recent market update: {title}",
+                "url": link,
+                "timestamp": pubDate
+            })
+        return news_list
     except Exception as e:
-        print(f"Error fetching from Brave API: {e}")
+        print(f"Error fetching RSS news: {e}")
         return []

@@ -1,4 +1,5 @@
-const BASE_URL = 'https://hackx-team-6-finance.onrender.com';
+// const BASE_URL = 'https://hackx-team-6-finance.onrender.com';
+const BASE_URL = 'http://localhost:8000';
 
 async function getJSON(path, opts = {}) {
   const res = await fetch(`${BASE_URL}${path}`, opts);

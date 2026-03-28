@@ -9,7 +9,7 @@
   "build": "vite build",
   "lint": "eslint .",
   "preview": "vite preview",
-  "backend": ".\\venv\\Scripts\\activate && cd backend && uvicorn app.main:app --reload"
+  "backend": "cd backend && .\\venv\\Scripts\\activate && uvicorn app.main:app --reload"
 },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.13",

@@ -26,7 +26,9 @@ ChartJS.register(
   Filler,
 );
 
-const marketData = [
+import { fetchDashboardOverview } from '../api';
+
+const defaultMarketData = [
   { name: 'S&P 500', value: '4,891.23', change: '+42.75', percentage: '+0.88%', isPositive: true },
   { name: 'NASDAQ', value: '17,425.68', change: '+215.92', percentage: '+1.25%', isPositive: true },
   { name: 'Dow Jones', value: '38,109.43', change: '-118.27', percentage: '-0.31%', isPositive: false },
@@ -173,6 +175,29 @@ const MarketTrendAnalysis = () => {
 
 
 const Dashboard = () => {
+  const [marketData, setMarketData] = useState(defaultMarketData);
+
+  useEffect(() => {
+    async function loadOverview() {
+      try {
+        const data = await fetchDashboardOverview();
+        if (data && data.length > 0) {
+          const formatted = data.map(item => ({
+            name: item.name,
+            value: item.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            change: item.change > 0 ? `+${item.change.toFixed(2)}` : `${item.change.toFixed(2)}`,
+            percentage: item.change_percent > 0 ? `+${item.change_percent.toFixed(2)}%` : `${item.change_percent.toFixed(2)}%`,
+            isPositive: item.change >= 0
+          }));
+          setMarketData(formatted);
+        }
+      } catch (err) {
+        console.error('Failed to load market overview:', err);
+      }
+    }
+    loadOverview();
+  }, []);
+
   return (
     <div className="space-y-8">
       <div>
