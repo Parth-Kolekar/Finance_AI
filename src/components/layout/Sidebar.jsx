@@ -7,7 +7,8 @@ const Sidebar = () => {
   return (
     <aside className="w-64 bg-[#161B22] p-5 border-r border-gray-800 flex flex-col">
       <div className="flex items-center gap-2 mb-10">
-        {/* ... (header is the same) */}
+        <span className="bg-blue-600 text-white font-bold text-xl p-2 rounded-md">F</span>
+        <h1 className="text-xl font-bold">FinanceAI <span className="text-xs text-gray-400 block -mt-1">PROFESSIONAL</span></h1>
       </div>
 
       <nav className="flex flex-col justify-between flex-1">
