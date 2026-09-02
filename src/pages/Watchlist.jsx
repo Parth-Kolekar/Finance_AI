@@ -4,18 +4,40 @@ import AddStockModal from '../components/watchlist/AddStockModal';
 import { fetchWatchlist } from '../api';
 
 const WATCHLIST_STORAGE_KEY = 'financeai_watchlist';
+const WATCHLIST_CACHE_KEY = 'financeai_watchlist_cache';
 const defaultTickers = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'GOOGL', 'AMZN'];
 
-// Helper function to get tickers from localStorage
 const getInitialTickers = () => {
   try {
-    const storedTickers = localStorage.getItem(WATCHLIST_STORAGE_KEY);
-    // Ensure what we get from storage is an array
+    const storedTickers = sessionStorage.getItem(WATCHLIST_STORAGE_KEY);
     const parsed = storedTickers ? JSON.parse(storedTickers) : defaultTickers;
-    return Array.isArray(parsed) ? parsed : defaultTickers;
+    return Array.isArray(parsed) && parsed.length ? parsed : defaultTickers;
   } catch (error) {
-    console.error("Failed to parse watchlist from localStorage", error);
+    console.error('Failed to parse watchlist from sessionStorage', error);
     return defaultTickers;
+  }
+};
+
+const getCachedWatchlistData = (tickers) => {
+  try {
+    const key = `${WATCHLIST_CACHE_KEY}:${tickers.join(',')}`;
+    const storedData = sessionStorage.getItem(key);
+    if (!storedData) return null;
+
+    const parsed = JSON.parse(storedData);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (error) {
+    console.error('Failed to read cached watchlist data', error);
+    return null;
+  }
+};
+
+const setCachedWatchlistData = (tickers, data) => {
+  try {
+    const key = `${WATCHLIST_CACHE_KEY}:${tickers.join(',')}`;
+    sessionStorage.setItem(key, JSON.stringify(data));
+  } catch (error) {
+    console.error('Failed to cache watchlist data', error);
   }
 };
 
@@ -28,11 +50,18 @@ const Watchlist = () => {
 
   // Effect to fetch data when the tickers list changes
   useEffect(() => {
-    // Save to localStorage whenever tickers change
-    localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(tickers));
+    sessionStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(tickers));
 
     if (tickers.length === 0) {
       setData([]);
+      return;
+    }
+
+    const cachedData = getCachedWatchlistData(tickers);
+    if (cachedData) {
+      setData(cachedData);
+      setError(null);
+      setLoading(false);
       return;
     }
 
@@ -41,11 +70,12 @@ const Watchlist = () => {
       setError(null);
       try {
         const res = await fetchWatchlist(tickers);
-        // Match the response data with our ticker order
         const sortedData = tickers
             .map(ticker => res.find(d => d.ticker === ticker))
-            .filter(Boolean); // Filter out any undefined results
+            .filter(Boolean);
+
         setData(sortedData || []);
+        setCachedWatchlistData(tickers, sortedData || []);
       } catch (err) {
         console.error(err);
         setError('Could not load watchlist data. Check your API keys and network connection.');
