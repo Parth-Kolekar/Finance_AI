@@ -1,10 +1,16 @@
 # app/main.py
 
+import os
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from .clients import financial_data
+
 from . import llm_services
+from .clients import financial_data
+
+load_dotenv()
 
 # --- Pydantic Models for Request Bodies ---
 class WatchlistRequest(BaseModel):
@@ -17,7 +23,7 @@ class AskRequest(BaseModel):
 app = FastAPI()
 
 origins = [
-    "https://finai-gray.vercel.app",
+    "https://finance-ai-lovat-one.vercel.app",
     "http://127.0.0.1:5173",
     "http://localhost:5173",
 ]
